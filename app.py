@@ -22,10 +22,10 @@ def generate_image(text, model, quality, size):
 
         response = client.images.generate(
             prompt=text,
-            model=model,
-            quality=quality,
-            size=size,
-            n=1,
+            model="dall-e-2", # dall-e-2 or dall-e-3
+            quality="standard", # standard or hd
+            size="512x512", # varies for dalle-2 and dalle-3, see https://openai.com/pricing for resolutions
+            n=1, # Number of images to generate
         )
     except Exception as error:
         print(str(error))
@@ -35,20 +35,16 @@ def generate_image(text, model, quality, size):
 
 
 with gr.Blocks() as demo:
-    gr.Markdown("# <center> OpenAI Image Generate API with Gradio </center>")
-    with gr.Row(variant="panel"):
-        model = gr.Dropdown(choices=["dall-e-2", "dall-e-3"], label="Model", value="dall-e-3")
-        quality = gr.Dropdown(choices=["standard", "hd"], label="Quality", value="standard")
-        size = gr.Dropdown(choices=["1024x1024", "1792x1024", "1024x1792"], label="Size",
-                           value="1024x1024")
+    gr.Markdown("# <center> Prompt de Resistance Image Generator</center>")
+    gr.Markdown("**Instructions**: Generate an image from the text prompt below, then click the download arrow from the top right of the image to save it.")
 
-    text = gr.Textbox(label="Input Text",
+    text = gr.Textbox(label="What do you want to create?",
                       placeholder="Enter your text and then click on the \"Image Generate\" button, "
                                   "or simply press the Enter key.")
-    btn = gr.Button("Image Generate")
+    btn = gr.Button("Generate Image")
     output_image = gr.Image(label="Image Output")
 
-    text.submit(fn=generate_image, inputs=[text, model, quality, size], outputs=output_image, api_name="generate_image")
-    btn.click(fn=generate_image, inputs=[text, model, quality, size], outputs=output_image, api_name=False)
+    text.submit(fn=generate_image, inputs=[text], outputs=output_image, api_name="generate_image")
+    btn.click(fn=generate_image, inputs=[text], outputs=output_image, api_name=False)
 
 demo.launch(share=True)
