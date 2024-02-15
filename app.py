@@ -38,7 +38,7 @@ def generate_image(text, pw, model):
             prompt=text,
             model=model, # dall-e-2 or dall-e-3
             quality="standard", # standard or hd
-            size="1024x1024", # varies for dalle-2 and dalle-3, see https://openai.com/pricing for resolutions
+            size="512x512" if model == "dall-e-2" else "1024x1024", # varies for dalle-2 and dalle-3, see https://openai.com/pricing for resolutions
             n=1, # Number of images to generate
         )
     except Exception as error:
