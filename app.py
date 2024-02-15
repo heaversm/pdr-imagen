@@ -24,7 +24,7 @@ if openai_key == "":
 
 
 
-def generate_image(text, pw):
+def generate_image(text, pw, model):
     # add a conditional to check for a valid password
 
     if pw != os.getenv("PW"):
@@ -32,15 +32,13 @@ def generate_image(text, pw):
         raise gr.Error("Invalid password. Please try again.")
 
     try:
-
-
         client = OpenAI(api_key=openai_key)
 
         response = client.images.generate(
             prompt=text,
-            model="dall-e-2", # dall-e-2 or dall-e-3
+            model=model, # dall-e-2 or dall-e-3
             quality="standard", # standard or hd
-            size="512x512", # varies for dalle-2 and dalle-3, see https://openai.com/pricing for resolutions
+            size="1024x1024", # varies for dalle-2 and dalle-3, see https://openai.com/pricing for resolutions
             n=1, # Number of images to generate
         )
     except Exception as error:
@@ -58,10 +56,12 @@ with gr.Blocks() as demo:
     text = gr.Textbox(label="What do you want to create?",
       placeholder="Enter your text and then click on the \"Image Generate\" button, "
         "or simply press the Enter key.")
+
+    model = gr.Dropdown(choices=["dall-e-2", "dall-e-3"], label="Model", value="dall-e-3")
     btn = gr.Button("Generate Image")
     output_image = gr.Image(label="Image Output")
 
-    text.submit(fn=generate_image, inputs=[text,pw], outputs=output_image, api_name="generate_image")
-    btn.click(fn=generate_image, inputs=[text,pw], outputs=output_image, api_name=False)
+    text.submit(fn=generate_image, inputs=[text,pw,model], outputs=output_image, api_name="generate_image")
+    btn.click(fn=generate_image, inputs=[text,pw,model], outputs=output_image, api_name=False)
 
 demo.launch(share=True)
