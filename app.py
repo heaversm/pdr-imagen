@@ -8,6 +8,11 @@ from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 
+# file extension stuff
+import requests
+import tempfile
+from io import BytesIO
+
 load_dotenv()
 
 openai_key = os.getenv("OPENAI_API_KEY")
@@ -69,7 +74,19 @@ def generate_image(text, pw, model):
         print(e)
         raise gr.Error("An error occurred while saving the prompt to the database.")
 
-    return image_url
+    # create a temporary file to store the image with extension
+    image_response = requests.get(image_url)
+    if image_response.status_code == 200:
+        # Use a temporary file to automatically clean up after the file is closed
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+        temp_file.write(image_response.content)
+        temp_file.close()
+        # return the file with extension for download
+        return temp_file.name
+    else:
+        raise gr.Error("Failed to download the image.")
+
+    #return image_url
 
 
 with gr.Blocks() as demo:
