@@ -1,5 +1,6 @@
 import os
 import sys
+import zipfile
 
 import gradio as gr
 from openai import OpenAI
@@ -43,6 +44,30 @@ try:
     print("Pinged your deployment. You successfully connected to MongoDB!")
 except Exception as e:
     print(e)
+
+image_paths_global = []
+
+def generate_images_wrapper(prompts, pw, model):
+    global image_paths_global
+    image_paths = generate_images(prompts, pw, model)
+    image_paths_global = image_paths  # Store paths globally
+    return image_paths  # You might want to return something else for display
+
+def zip_images(image_paths):
+    zip_file_path = tempfile.NamedTemporaryFile(delete=False, suffix='.zip').name
+    with zipfile.ZipFile(zip_file_path, 'w') as zipf:
+        for path in image_paths:
+            zipf.write(path, arcname=os.path.basename(path))
+            os.remove(path)  # Clean up the temp image file
+    return zip_file_path
+
+def download_all_images():
+    global image_paths_global
+    if not image_paths_global:
+        raise gr.Error("No images to download.")
+    zip_path = zip_images(image_paths_global)
+    image_paths_global = []  # Reset the global variable
+    return zip_path
 
 def generate_images(prompts, pw, model):
     # add a conditional to check for a valid password
@@ -93,6 +118,7 @@ def generate_images(prompts, pw, model):
         except Exception as error:
             print(str(error))
             raise gr.Error(f"An error occurred while generating the image for: {prompt}")
+
     return image_paths
 
 
@@ -109,7 +135,13 @@ with gr.Blocks() as demo:
     # output_image = gr.Image(label="Image Output")
     output_images = gr.Gallery(label="Image Outputs",columns=[3], rows=[1], object_fit="contain", height="auto",allow_preview=False)
 
-    text.submit(fn=generate_images, inputs=[text,pw,model], outputs=output_images, api_name="generate_image")
-    btn.click(fn=generate_images, inputs=[text,pw,model], outputs=output_images, api_name=False)
+    text.submit(fn=generate_images_wrapper, inputs=[text,pw,model], outputs=output_images, api_name="generate_image")
+    btn.click(fn=generate_images_wrapper, inputs=[text,pw,model], outputs=output_images, api_name=False)
+
+    download_all_btn = gr.Button("Download All")
+    download_link = gr.File(label="Download Zip")
+    download_all_btn.click(fn=download_all_images, inputs=[], outputs=download_link)
+
+
 
 demo.launch(share=True)
