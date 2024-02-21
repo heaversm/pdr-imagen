@@ -5,6 +5,9 @@ import gradio as gr
 from openai import OpenAI
 from dotenv import load_dotenv
 
+from pymongo.mongo_client import MongoClient
+from pymongo.server_api import ServerApi
+
 load_dotenv()
 
 openai_key = os.getenv("OPENAI_API_KEY")
@@ -22,17 +25,30 @@ if pw_key == "":
 if openai_key == "":
     sys.exit("Please Provide Your OpenAI API Key")
 
+# Connect to MongoDB
+uri = os.getenv("MONGO_URI")
+mongo_client = MongoClient(uri, server_api=ServerApi('1'))
 
+mongo_db = mongo_client.pdr
+mongo_collection = mongo_db["images"]
+
+# Send a ping to confirm a successful connection
+try:
+    mongo_client.admin.command('ping')
+    print("Pinged your deployment. You successfully connected to MongoDB!")
+except Exception as e:
+    print(e)
 
 def generate_image(text, pw, model):
     # add a conditional to check for a valid password
-
     if pw != os.getenv("PW"):
         # output an error message to the user in the gradio interface if password is invalid
         raise gr.Error("Invalid password. Please try again.")
 
     try:
         client = OpenAI(api_key=openai_key)
+
+
 
         response = client.images.generate(
             prompt=text,
@@ -45,7 +61,15 @@ def generate_image(text, pw, model):
         print(str(error))
         raise gr.Error("An error occurred while generating the image.")
 
-    return response.data[0].url
+    image_url = response.data[0].url
+
+    try:
+        mongo_collection.insert_one({"text": text, "model": model, "image_url": image_url})
+    except Exception as e:
+        print(e)
+        raise gr.Error("An error occurred while saving the prompt to the database.")
+
+    return image_url
 
 
 with gr.Blocks() as demo:
