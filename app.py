@@ -52,7 +52,7 @@ def generate_images(prompts, pw, model):
 
     image_paths = []  # Initialize a list to hold paths of generated images
     # Split the prompts string into individual prompts based on comma separation
-    prompts_list = prompts.split(',')
+    prompts_list = prompts.split(';')
     for prompt in prompts_list:
         text = prompt.strip()  # Remove leading/trailing whitespace
 
