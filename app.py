@@ -44,49 +44,56 @@ try:
 except Exception as e:
     print(e)
 
-def generate_image(text, pw, model):
+def generate_images(prompts, pw, model):
     # add a conditional to check for a valid password
     if pw != os.getenv("PW"):
         # output an error message to the user in the gradio interface if password is invalid
         raise gr.Error("Invalid password. Please try again.")
 
-    try:
-        client = OpenAI(api_key=openai_key)
+    image_paths = []  # Initialize a list to hold paths of generated images
+    # Split the prompts string into individual prompts based on comma separation
+    prompts_list = prompts.split(',')
+    for prompt in prompts_list:
+        text = prompt.strip()  # Remove leading/trailing whitespace
+
+        try:
+            client = OpenAI(api_key=openai_key)
+
+            response = client.images.generate(
+                prompt=text,
+                model=model, # dall-e-2 or dall-e-3
+                quality="standard", # standard or hd
+                size="512x512" if model == "dall-e-2" else "1024x1024", # varies for dalle-2 and dalle-3, see https://openai.com/pricing for resolutions
+                n=1, # Number of images to generate
+            )
 
 
+            image_url = response.data[0].url
 
-        response = client.images.generate(
-            prompt=text,
-            model=model, # dall-e-2 or dall-e-3
-            quality="standard", # standard or hd
-            size="512x512" if model == "dall-e-2" else "1024x1024", # varies for dalle-2 and dalle-3, see https://openai.com/pricing for resolutions
-            n=1, # Number of images to generate
-        )
-    except Exception as error:
-        print(str(error))
-        raise gr.Error("An error occurred while generating the image.")
+            try:
+                mongo_collection.insert_one({"text": text, "model": model, "image_url": image_url})
+            except Exception as e:
+                print(e)
+                raise gr.Error("An error occurred while saving the prompt to the database.")
 
-    image_url = response.data[0].url
-
-    try:
-        mongo_collection.insert_one({"text": text, "model": model, "image_url": image_url})
-    except Exception as e:
-        print(e)
-        raise gr.Error("An error occurred while saving the prompt to the database.")
-
-    # create a temporary file to store the image with extension
-    image_response = requests.get(image_url)
-    if image_response.status_code == 200:
-        # Use a temporary file to automatically clean up after the file is closed
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
-        temp_file.write(image_response.content)
-        temp_file.close()
-        # return the file with extension for download
-        return temp_file.name
-    else:
-        raise gr.Error("Failed to download the image.")
-
-    #return image_url
+            # create a temporary file to store the image with extension
+            image_response = requests.get(image_url)
+            if image_response.status_code == 200:
+                # Use a temporary file to automatically clean up after the file is closed
+                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+                temp_file.write(image_response.content)
+                temp_file.close()
+                # return the file with extension for download
+                # return temp_file.name
+                # append the file with extension to the list of image paths
+                print(temp_file.name)
+                image_paths.append(temp_file.name)
+            else:
+                raise gr.Error("Failed to download the image.")
+        except Exception as error:
+            print(str(error))
+            raise gr.Error(f"An error occurred while generating the image for: {prompt}")
+    return image_paths
 
 
 with gr.Blocks() as demo:
@@ -95,14 +102,14 @@ with gr.Blocks() as demo:
     pw = gr.Textbox(label="Password", type="password",
       placeholder="Enter the password to unlock the service")
     text = gr.Textbox(label="What do you want to create?",
-      placeholder="Enter your text and then click on the \"Image Generate\" button, "
-        "or simply press the Enter key.")
+      placeholder="Enter your text and then click on the \"Image Generate\" button")
 
     model = gr.Dropdown(choices=["dall-e-2", "dall-e-3"], label="Model", value="dall-e-3")
-    btn = gr.Button("Generate Image")
-    output_image = gr.Image(label="Image Output")
+    btn = gr.Button("Generate Images")
+    # output_image = gr.Image(label="Image Output")
+    output_images = gr.Gallery(label="Image Outputs",columns=[3], rows=[1], object_fit="contain", height="auto",allow_preview=False)
 
-    text.submit(fn=generate_image, inputs=[text,pw,model], outputs=output_image, api_name="generate_image")
-    btn.click(fn=generate_image, inputs=[text,pw,model], outputs=output_image, api_name=False)
+    text.submit(fn=generate_images, inputs=[text,pw,model], outputs=output_images, api_name="generate_image")
+    btn.click(fn=generate_images, inputs=[text,pw,model], outputs=output_images, api_name=False)
 
 demo.launch(share=True)
