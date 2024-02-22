@@ -1,18 +1,23 @@
+# file stuff
 import os
 import sys
 import zipfile
+import requests
+import tempfile
+import json
+from io import BytesIO
 
+# gradio / hf stuff
 import gradio as gr
 from openai import OpenAI
 from dotenv import load_dotenv
 
+# stats stuff
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 
-# file extension stuff
-import requests
-import tempfile
-from io import BytesIO
+
+
 
 load_dotenv()
 
@@ -48,25 +53,36 @@ except Exception as e:
 image_paths_global = []
 
 def generate_images_wrapper(prompts, pw, model):
-    global image_paths_global
-    image_paths = generate_images(prompts, pw, model)
+    global image_paths_global, image_labels_global
+    image_paths, image_labels = generate_images(prompts, pw, model)
     image_paths_global = image_paths  # Store paths globally
-    return image_paths  # You might want to return something else for display
+    image_labels_global = image_labels  # Store labels globally
+    return list(zip(image_paths, image_labels))  # Return a list of tuples containing image paths and labels
 
-def zip_images(image_paths):
+def download_image(url):
+    response = requests.get(url)
+    if response.status_code == 200:
+        return response.content
+    else:
+        raise Exception(f"Failed to download image from URL: {url}")
+
+def zip_images(image_paths_and_labels):
     zip_file_path = tempfile.NamedTemporaryFile(delete=False, suffix='.zip').name
     with zipfile.ZipFile(zip_file_path, 'w') as zipf:
-        for path in image_paths:
-            zipf.write(path, arcname=os.path.basename(path))
-            os.remove(path)  # Clean up the temp image file
+        for image_url, label in image_paths_and_labels:
+            image_content = download_image(image_url)
+            zipf.writestr(label + ".png", image_content)
     return zip_file_path
 
+
 def download_all_images():
-    global image_paths_global
+    global image_paths_global, image_labels_global
     if not image_paths_global:
         raise gr.Error("No images to download.")
-    zip_path = zip_images(image_paths_global)
+    image_paths_and_labels = list(zip(image_paths_global, image_labels_global))
+    zip_path = zip_images(image_paths_and_labels)
     image_paths_global = []  # Reset the global variable
+    image_labels_global = []  # Reset the global variable
     return zip_path
 
 def generate_images(prompts, pw, model):
@@ -76,6 +92,7 @@ def generate_images(prompts, pw, model):
         raise gr.Error("Invalid password. Please try again.")
 
     image_paths = []  # Initialize a list to hold paths of generated images
+    image_labels = []  # Initialize a list to hold labels of generated images
     # Split the prompts string into individual prompts based on comma separation
     prompts_list = prompts.split(';')
     for prompt in prompts_list:
@@ -92,8 +109,8 @@ def generate_images(prompts, pw, model):
                 n=1, # Number of images to generate
             )
 
-
             image_url = response.data[0].url
+            image_label = f"Prompt: {text}"  # Creating a label for the image
 
             try:
                 mongo_collection.insert_one({"text": text, "model": model, "image_url": image_url})
@@ -101,47 +118,34 @@ def generate_images(prompts, pw, model):
                 print(e)
                 raise gr.Error("An error occurred while saving the prompt to the database.")
 
-            # create a temporary file to store the image with extension
-            image_response = requests.get(image_url)
-            if image_response.status_code == 200:
-                # Use a temporary file to automatically clean up after the file is closed
-                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-                temp_file.write(image_response.content)
-                temp_file.close()
-                # return the file with extension for download
-                # return temp_file.name
-                # append the file with extension to the list of image paths
-                print(temp_file.name)
-                image_paths.append(temp_file.name)
-            else:
-                raise gr.Error("Failed to download the image.")
+            # append the image URL to the list of image paths
+            image_paths.append(image_url)
+            image_labels.append(image_label)  # Append the label to the list of labels
+
         except Exception as error:
             print(str(error))
             raise gr.Error(f"An error occurred while generating the image for: {prompt}")
 
-    return image_paths
-
+    return image_paths, image_labels  # Return both image paths and labels
 
 with gr.Blocks() as demo:
     gr.Markdown("# <center> Prompt de Resistance Image Generator</center>")
     gr.Markdown("**Instructions**: To use this service, please enter the password. Then generate an image from the prompt field below, then click the download arrow from the top right of the image to save it.")
     pw = gr.Textbox(label="Password", type="password",
-      placeholder="Enter the password to unlock the service")
+                     placeholder="Enter the password to unlock the service")
     text = gr.Textbox(label="What do you want to create?",
-      placeholder="Enter your text and then click on the \"Image Generate\" button")
+                      placeholder="Enter your text and then click on the \"Image Generate\" button")
 
     model = gr.Dropdown(choices=["dall-e-2", "dall-e-3"], label="Model", value="dall-e-3")
     btn = gr.Button("Generate Images")
-    # output_image = gr.Image(label="Image Output")
-    output_images = gr.Gallery(label="Image Outputs",columns=[3], rows=[1], object_fit="contain", height="auto",allow_preview=False)
+    output_images = gr.Gallery(label="Image Outputs", show_label=True, columns=[3], rows=[1], object_fit="contain",
+                                height="auto", allow_preview=False)
 
-    text.submit(fn=generate_images_wrapper, inputs=[text,pw,model], outputs=output_images, api_name="generate_image")
-    btn.click(fn=generate_images_wrapper, inputs=[text,pw,model], outputs=output_images, api_name=False)
+    text.submit(fn=generate_images_wrapper, inputs=[text, pw, model], outputs=output_images, api_name="generate_image")
+    btn.click(fn=generate_images_wrapper, inputs=[text, pw, model], outputs=output_images, api_name=False)
 
     download_all_btn = gr.Button("Download All")
     download_link = gr.File(label="Download Zip")
     download_all_btn.click(fn=download_all_images, inputs=[], outputs=download_link)
 
-
-
-demo.launch(share=True)
+demo.launch(share=False)
