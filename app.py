@@ -4,8 +4,12 @@ import sys
 import zipfile
 import requests
 import tempfile
-import json
 from io import BytesIO
+import random
+import string
+
+#image generation stuff
+from PIL import Image
 
 # gradio / hf stuff
 import gradio as gr
@@ -69,9 +73,12 @@ def download_image(url):
 def zip_images(image_paths_and_labels):
     zip_file_path = tempfile.NamedTemporaryFile(delete=False, suffix='.zip').name
     with zipfile.ZipFile(zip_file_path, 'w') as zipf:
-        for image_url, label in image_paths_and_labels:
+        for image_url, _ in image_paths_and_labels:
             image_content = download_image(image_url)
-            zipf.writestr(label + ".png", image_content)
+            # Generate a random filename for the image
+            random_filename = ''.join(random.choices(string.ascii_letters + string.digits, k=10)) + ".png"
+            # Write the image content to the zip file with the random filename
+            zipf.writestr(random_filename, image_content)
     return zip_file_path
 
 
@@ -136,7 +143,7 @@ with gr.Blocks() as demo:
     text = gr.Textbox(label="What do you want to create?",
                       placeholder="Enter your text and then click on the \"Image Generate\" button")
 
-    model = gr.Dropdown(choices=["dall-e-2", "dall-e-3"], label="Model", value="dall-e-3")
+    model = gr.Dropdown(choices=["dall-e-2", "dall-e-3"], label="Model", value="dall-e-2")
     btn = gr.Button("Generate Images")
     output_images = gr.Gallery(label="Image Outputs", show_label=True, columns=[3], rows=[1], object_fit="contain",
                                 height="auto", allow_preview=False)
