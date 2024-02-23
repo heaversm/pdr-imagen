@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 # stats stuff
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
-import time  # Make sure to import the time module
+import time
 
 
 
@@ -51,28 +51,19 @@ image_labels_global = []
 image_paths_global = []
 
 def update_labels(show_labels):
-    if show_labels:
-        # return [(path, label) for path, label in zip(image_paths_global, image_labels_global)]
-        updated_gallery = [(path, label) for path, label in zip(image_paths_global, image_labels_global)]
-    else:
-        # return [(path, "") for path in image_paths_global]  # Empty string as label to hide them
-        updated_gallery = [(path, "") for path in image_paths_global]  # Empty string as label to hide them
+    updated_gallery = [(path, label if show_labels else "") for path, label in zip(image_paths_global, image_labels_global)]
     return updated_gallery
 
 def generate_images_wrapper(prompts, pw, model, show_labels):
     global image_paths_global, image_labels_global
     image_paths, image_labels = generate_images(prompts, pw, model)
-    image_paths_global = image_paths  # Store paths globally
+    image_paths_global = image_paths
 
-    if show_labels:
-        image_labels_global = image_labels  # Store labels globally if showing labels is enabled
-    else:
-        image_labels_global = [""] * len(image_labels)  # Use empty labels if showing labels is disabled
-
-    # Modify the return statement to not use labels if show_labels is False
+    # store this as a global so we can handle toggle state
+    image_labels_global = image_labels
     image_data = [(path, label if show_labels else "") for path, label in zip(image_paths, image_labels)]
 
-    return image_data  # Return image paths with or without labels based on the toggle
+    return image_data
 
 def download_image(url):
     response = requests.get(url)
@@ -86,7 +77,6 @@ def zip_images(image_paths_and_labels):
     with zipfile.ZipFile(zip_file_path, 'w') as zipf:
         for image_url, _ in image_paths_and_labels:
             image_content = download_image(image_url)
-            # Generate a random filename for the image
             random_filename = ''.join(random.choices(string.ascii_letters + string.digits, k=10)) + ".png"
             # Write the image content to the zip file with the random filename
             zipf.writestr(random_filename, image_content)
@@ -108,19 +98,22 @@ def generate_images(prompts, pw, model):
     if pw != os.getenv("PW"):
         raise gr.Error("Invalid password. Please try again.")
 
-    image_paths = []  # Initialize a list to hold paths of generated images
-    image_labels = []  # Initialize a list to hold labels of generated images
-    users = []  # Initialize a list to hold user initials
+    image_paths = []  # holds urls of images
+    image_labels = []  # shows the prompt in the gallery above the image
+    users = []  # adds the user to the label
 
     # Split the prompts string into individual prompts based on semicolon separation
     prompts_list = prompts.split(';')
 
     for entry in prompts_list:
         entry_parts = entry.split('-', 1)  # Split by the first dash found
-        if len(entry_parts) != 2:
-            raise gr.Error("Invalid prompt format. Please ensure it is in 'initials-prompt' format.")
+        if len(entry_parts) == 2:
+            #raise gr.Error("Invalid prompt format. Please ensure it is in 'initials-prompt' format.")
+            user_initials, text = entry_parts[0].strip(), entry_parts[1].strip()  # Extract user initials and the prompt
+        else:
+            text = entry.strip()  # If no initials are provided, use the entire prompt as the text
+            user_initials = ""
 
-        user_initials, text = entry_parts[0].strip(), entry_parts[1].strip()  # Extract user initials and the prompt
         users.append(user_initials)  # Append user initials to the list
 
         try:
@@ -138,9 +131,11 @@ def generate_images(prompts, pw, model):
             gen_time = end_time - start_time  # total generation time
 
             image_url = response.data[0].url
-            image_label = f"User: {user_initials}, Prompt: {text}"  # Creating a label for the image including user initials
+            # conditionally render the user to the label with the prompt
+            image_label = f"Prompt: {text}" if user_initials == "" else f"User: {user_initials}, Prompt: {text}"
 
             try:
+                # Save the prompt, model, image URL, generation time and creation timestamp to the database
                 mongo_collection.insert_one({"user": user_initials, "text": text, "model": model, "image_url": image_url, "gen_time": gen_time, "timestamp": time.time()})
             except Exception as e:
                 print(e)
@@ -165,14 +160,13 @@ with gr.Blocks() as demo:
                       placeholder="Enter your text and then click on the \"Image Generate\" button")
 
     model = gr.Dropdown(choices=["dall-e-2", "dall-e-3"], label="Model", value="dall-e-3")
-    #MH TODO: not toggling properly
-    show_labels = gr.Checkbox(label="Show Image Labels", value=True)
+    show_labels = gr.Checkbox(label="Show Image Labels", value=False)
     btn = gr.Button("Generate Images")
     output_images = gr.Gallery(label="Image Outputs", show_label=True, columns=[3], rows=[1], object_fit="contain",
                                 height="auto", allow_preview=False)
 
-    text.submit(fn=generate_images_wrapper, inputs=[text, pw, model], outputs=output_images, api_name="generate_image")
-    # btn.click(fn=generate_images_wrapper, inputs=[text, pw, model], outputs=output_images, api_name=False)
+    #trigger generation either through hitting enter in the text field, or clicking the button.
+    text.submit(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels], outputs=output_images, api_name="generate_image") # Generate an api endpoint in Gradio / HF
     btn.click(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels], outputs=output_images, api_name=False)
 
     show_labels.change(fn=update_labels, inputs=[show_labels], outputs=[output_images])
