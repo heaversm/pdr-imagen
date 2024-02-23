@@ -50,6 +50,21 @@ mongo_collection = mongo_db["images"]
 image_labels_global = []
 image_paths_global = []
 
+#load challenges
+challenges = []
+with open('challenges.txt', 'r') as file:
+    for line in file:
+        challenges.append(line.strip())
+
+# pick a random challenge
+def get_challenge():
+    global challenge
+    challenge = random.choice(challenges)
+    return challenge
+
+# set initial challenge
+challenge = get_challenge()
+
 def update_labels(show_labels):
     updated_gallery = [(path, label if show_labels else "") for path, label in zip(image_paths_global, image_labels_global)]
     return updated_gallery
@@ -120,8 +135,11 @@ def generate_images(prompts, pw, model):
             openai_client = OpenAI(api_key=openai_key)
             start_time = time.time()
 
+            #make a prompt with the challenge and text
+            prompt_w_challenge = f"{challenge}: {text}"
+
             response = openai_client.images.generate(
-                prompt=text,
+                prompt=prompt_w_challenge,
                 model=model, # dall-e-2 or dall-e-3
                 quality="standard", # standard or hd
                 size="512x512" if model == "dall-e-2" else "1024x1024", # varies for dalle-2 and dalle-3
@@ -152,25 +170,27 @@ def generate_images(prompts, pw, model):
     return image_paths, image_labels  # Return both image paths and labels
 
 with gr.Blocks() as demo:
-    gr.Markdown("# <center> Prompt de Resistance Image Generator</center>")
-    gr.Markdown("**Instructions**: To use this service, please enter the password. Then generate an image from the prompt field below, then click the download arrow from the top right of the image to save it.")
+    gr.Markdown("# <center>Prompt de Resistance Image Generator</center>")
+    gr.Markdown("**Instructions**: To use this service, please enter the password. Then generate an image from the prompt field below in response to the challenge, then click the download arrow from the top right of the image to save it.")
+    challenge_display = gr.Textbox(label="Challenge", value=get_challenge())
+    challenge_display.disabled = True
+    regenerate_btn = gr.Button("New Challenge")
     pw = gr.Textbox(label="Password", type="password",
                      placeholder="Enter the password to unlock the service")
     text = gr.Textbox(label="What do you want to create?",
                       placeholder="Enter your text and then click on the \"Image Generate\" button")
-
     model = gr.Dropdown(choices=["dall-e-2", "dall-e-3"], label="Model", value="dall-e-3")
     show_labels = gr.Checkbox(label="Show Image Labels", value=False)
     btn = gr.Button("Generate Images")
     output_images = gr.Gallery(label="Image Outputs", show_label=True, columns=[3], rows=[1], object_fit="contain",
                                 height="auto", allow_preview=False)
-
     #trigger generation either through hitting enter in the text field, or clicking the button.
     text.submit(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels], outputs=output_images, api_name="generate_image") # Generate an api endpoint in Gradio / HF
     btn.click(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels], outputs=output_images, api_name=False)
-
+    # toggle hiding and showing of labels
     show_labels.change(fn=update_labels, inputs=[show_labels], outputs=[output_images])
-
+    # generate new challenge
+    regenerate_btn.click(fn=get_challenge, inputs=[], outputs=[challenge_display])
     download_all_btn = gr.Button("Download All")
     download_link = gr.File(label="Download Zip")
     download_all_btn.click(fn=download_all_images, inputs=[], outputs=download_link)
