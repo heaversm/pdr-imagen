@@ -56,12 +56,21 @@ except Exception as e:
 
 image_paths_global = []
 
-def generate_images_wrapper(prompts, pw, model):
+
+def generate_images_wrapper(prompts, pw, model, show_labels):
     global image_paths_global, image_labels_global
     image_paths, image_labels = generate_images(prompts, pw, model)
     image_paths_global = image_paths  # Store paths globally
-    image_labels_global = image_labels  # Store labels globally
-    return list(zip(image_paths, image_labels))  # Return a list of tuples containing image paths and labels
+
+    if show_labels:
+        image_labels_global = image_labels  # Store labels globally if showing labels is enabled
+    else:
+        image_labels_global = [""] * len(image_labels)  # Use empty labels if showing labels is disabled
+
+    # Modify the return statement to not use labels if show_labels is False
+    image_data = [(path, label if show_labels else "") for path, label in zip(image_paths, image_labels)]
+
+    return image_data  # Return image paths with or without labels based on the toggle
 
 def download_image(url):
     response = requests.get(url)
@@ -93,45 +102,51 @@ def download_all_images():
     return zip_path
 
 def generate_images(prompts, pw, model):
-    # add a conditional to check for a valid password
+    # Check for a valid password
     if pw != os.getenv("PW"):
-        # output an error message to the user in the gradio interface if password is invalid
         raise gr.Error("Invalid password. Please try again.")
 
     image_paths = []  # Initialize a list to hold paths of generated images
     image_labels = []  # Initialize a list to hold labels of generated images
-    # Split the prompts string into individual prompts based on comma separation
+    users = []  # Initialize a list to hold user initials
+
+    # Split the prompts string into individual prompts based on semicolon separation
     prompts_list = prompts.split(';')
-    for prompt in prompts_list:
-        text = prompt.strip()  # Remove leading/trailing whitespace
+
+    for entry in prompts_list:
+        entry_parts = entry.split('-', 1)  # Split by the first dash found
+        if len(entry_parts) != 2:
+            raise gr.Error("Invalid prompt format. Please ensure it is in 'initials-prompt' format.")
+
+        user_initials, text = entry_parts[0].strip(), entry_parts[1].strip()  # Extract user initials and the prompt
+        users.append(user_initials)  # Append user initials to the list
 
         try:
             client = OpenAI(api_key=openai_key)
-
             response = client.images.generate(
                 prompt=text,
                 model=model, # dall-e-2 or dall-e-3
                 quality="standard", # standard or hd
-                size="512x512" if model == "dall-e-2" else "1024x1024", # varies for dalle-2 and dalle-3, see https://openai.com/pricing for resolutions
+                size="512x512" if model == "dall-e-2" else "1024x1024", # varies for dalle-2 and dalle-3
                 n=1, # Number of images to generate
             )
 
             image_url = response.data[0].url
-            image_label = f"Prompt: {text}"  # Creating a label for the image
+            image_label = f"User: {user_initials}, Prompt: {text}"  # Creating a label for the image including user initials
 
             try:
-                mongo_collection.insert_one({"text": text, "model": model, "image_url": image_url})
+                mongo_collection.insert_one({"user": user_initials, "text": text, "model": model, "image_url": image_url})
             except Exception as e:
                 print(e)
                 raise gr.Error("An error occurred while saving the prompt to the database.")
 
-            # append the image URL to the list of image paths
+            # Append the image URL and label to their respective lists
             image_paths.append(image_url)
-            image_labels.append(image_label)  # Append the label to the list of labels
+            image_labels.append(image_label)
 
         except Exception as error:
             print(str(error))
-            raise gr.Error(f"An error occurred while generating the image for: {prompt}")
+            raise gr.Error(f"An error occurred while generating the image for: {entry}")
 
     return image_paths, image_labels  # Return both image paths and labels
 
@@ -144,12 +159,14 @@ with gr.Blocks() as demo:
                       placeholder="Enter your text and then click on the \"Image Generate\" button")
 
     model = gr.Dropdown(choices=["dall-e-2", "dall-e-3"], label="Model", value="dall-e-2")
+    show_labels = gr.Checkbox(label="Show Image Labels", value=True)  # Default is to show labels
     btn = gr.Button("Generate Images")
     output_images = gr.Gallery(label="Image Outputs", show_label=True, columns=[3], rows=[1], object_fit="contain",
                                 height="auto", allow_preview=False)
 
     text.submit(fn=generate_images_wrapper, inputs=[text, pw, model], outputs=output_images, api_name="generate_image")
-    btn.click(fn=generate_images_wrapper, inputs=[text, pw, model], outputs=output_images, api_name=False)
+    # btn.click(fn=generate_images_wrapper, inputs=[text, pw, model], outputs=output_images, api_name=False)
+    btn.click(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels], outputs=output_images, api_name=False)
 
     download_all_btn = gr.Button("Download All")
     download_link = gr.File(label="Download Zip")
