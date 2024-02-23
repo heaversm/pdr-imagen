@@ -54,8 +54,14 @@ try:
 except Exception as e:
     print(e)
 
-image_paths_global = []
+# image_paths_global = []
+# image_labels_global = []
 
+def update_labels(show_labels):
+    if show_labels:
+        return [(path, label) for path, label in zip(image_paths_global, image_labels_global)]
+    else:
+        return [(path, "") for path in image_paths_global]  # Empty string as label to hide them
 
 def generate_images_wrapper(prompts, pw, model, show_labels):
     global image_paths_global, image_labels_global
@@ -167,6 +173,8 @@ with gr.Blocks() as demo:
     text.submit(fn=generate_images_wrapper, inputs=[text, pw, model], outputs=output_images, api_name="generate_image")
     # btn.click(fn=generate_images_wrapper, inputs=[text, pw, model], outputs=output_images, api_name=False)
     btn.click(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels], outputs=output_images, api_name=False)
+
+    show_labels.change(fn=update_labels, inputs=[show_labels], outputs=[output_images])
 
     download_all_btn = gr.Button("Download All")
     download_link = gr.File(label="Download Zip")
