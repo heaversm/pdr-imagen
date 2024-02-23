@@ -172,6 +172,7 @@ def generate_images(prompts, pw, model):
 with gr.Blocks() as demo:
     gr.Markdown("# <center>Prompt de Resistance Image Generator</center>")
     gr.Markdown("**Instructions**: To use this service, please enter the password. Then generate an image from the prompt field below in response to the challenge, then click the download arrow from the top right of the image to save it.")
+    gr.Markdown("**Tips**: Use adjectives (size,color,mood), specify the visual style (realistic,cartoon,8-bit), explain the point of view (from above,first person,wide angle) ")
     challenge_display = gr.Textbox(label="Challenge", value=get_challenge())
     challenge_display.disabled = True
     regenerate_btn = gr.Button("New Challenge")
