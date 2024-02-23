@@ -118,7 +118,7 @@ def generate_images(prompts, pw, model):
     users = []  # adds the user to the label
 
     # Split the prompts string into individual prompts based on semicolon separation
-    prompts_list = prompts.split(';')
+    prompts_list = [prompt for prompt in prompts.split(';') if prompt]
 
     for entry in prompts_list:
         entry_parts = entry.split('-', 1)  # Split by the first dash found
