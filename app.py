@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 # stats stuff
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
-
+import time  # Make sure to import the time module
 
 
 
@@ -47,21 +47,17 @@ mongo_client = MongoClient(uri, server_api=ServerApi('1'))
 mongo_db = mongo_client.pdr
 mongo_collection = mongo_db["images"]
 
-# Send a ping to confirm a successful connection
-try:
-    mongo_client.admin.command('ping')
-    print("Pinged your deployment. You successfully connected to MongoDB!")
-except Exception as e:
-    print(e)
-
-# image_paths_global = []
-# image_labels_global = []
+image_labels_global = []
+image_paths_global = []
 
 def update_labels(show_labels):
     if show_labels:
-        return [(path, label) for path, label in zip(image_paths_global, image_labels_global)]
+        # return [(path, label) for path, label in zip(image_paths_global, image_labels_global)]
+        updated_gallery = [(path, label) for path, label in zip(image_paths_global, image_labels_global)]
     else:
-        return [(path, "") for path in image_paths_global]  # Empty string as label to hide them
+        # return [(path, "") for path in image_paths_global]  # Empty string as label to hide them
+        updated_gallery = [(path, "") for path in image_paths_global]  # Empty string as label to hide them
+    return updated_gallery
 
 def generate_images_wrapper(prompts, pw, model, show_labels):
     global image_paths_global, image_labels_global
@@ -128,20 +124,24 @@ def generate_images(prompts, pw, model):
         users.append(user_initials)  # Append user initials to the list
 
         try:
-            client = OpenAI(api_key=openai_key)
-            response = client.images.generate(
+            openai_client = OpenAI(api_key=openai_key)
+            start_time = time.time()
+
+            response = openai_client.images.generate(
                 prompt=text,
                 model=model, # dall-e-2 or dall-e-3
                 quality="standard", # standard or hd
                 size="512x512" if model == "dall-e-2" else "1024x1024", # varies for dalle-2 and dalle-3
                 n=1, # Number of images to generate
             )
+            end_time = time.time()
+            gen_time = end_time - start_time  # total generation time
 
             image_url = response.data[0].url
             image_label = f"User: {user_initials}, Prompt: {text}"  # Creating a label for the image including user initials
 
             try:
-                mongo_collection.insert_one({"user": user_initials, "text": text, "model": model, "image_url": image_url})
+                mongo_collection.insert_one({"user": user_initials, "text": text, "model": model, "image_url": image_url, "gen_time": gen_time, "timestamp": time.time()})
             except Exception as e:
                 print(e)
                 raise gr.Error("An error occurred while saving the prompt to the database.")
@@ -164,8 +164,9 @@ with gr.Blocks() as demo:
     text = gr.Textbox(label="What do you want to create?",
                       placeholder="Enter your text and then click on the \"Image Generate\" button")
 
-    model = gr.Dropdown(choices=["dall-e-2", "dall-e-3"], label="Model", value="dall-e-2")
-    show_labels = gr.Checkbox(label="Show Image Labels", value=True)  # Default is to show labels
+    model = gr.Dropdown(choices=["dall-e-2", "dall-e-3"], label="Model", value="dall-e-3")
+    #MH TODO: not toggling properly
+    show_labels = gr.Checkbox(label="Show Image Labels", value=True)
     btn = gr.Button("Generate Images")
     output_images = gr.Gallery(label="Image Outputs", show_label=True, columns=[3], rows=[1], object_fit="contain",
                                 height="auto", allow_preview=False)
