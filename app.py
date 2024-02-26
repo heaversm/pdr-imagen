@@ -21,6 +21,8 @@ from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 import time
 
+# countdown stuff
+from datetime import datetime, timedelta
 
 
 load_dotenv()
@@ -169,25 +171,72 @@ def generate_images(prompts, pw, model):
 
     return image_paths, image_labels  # Return both image paths and labels
 
+
+#timer stuff
+timer_cancelled_global = False # when true, timer does not tick down
+
+def countdown(seconds):
+  """
+  This function takes the number of seconds as input and returns a string displaying the remaining time.
+  """
+  target_time = datetime.now() + timedelta(seconds=int(seconds))
+  while target_time > datetime.now():
+    remaining_time = target_time - datetime.now()
+    remaining_seconds = int(remaining_time.total_seconds())
+    yield f"{remaining_seconds:02d}"
+    # Check if the countdown was cancelled
+    if timer_cancelled_global:
+      break
+
+def stop_countdown():
+  """
+  This function stops the countdown.
+  """
+  global timer_cancelled_global
+  timer_cancelled_global = True
+
+def reset_countdown(slider):
+  """
+  This function resets the countdown.
+  """
+  global timer_cancelled_global
+  timer_cancelled_global = False
+  return 60
+
+
+
 with gr.Blocks() as demo:
     gr.Markdown("# <center>Prompt de Resistance Image Generator</center>")
-    gr.Markdown("**Instructions**: To use this service, please enter the password. Then generate an image from the prompt field below in response to the challenge, then click the download arrow from the top right of the image to save it.")
-    gr.Markdown("**Tips**: Use adjectives (size,color,mood), specify the visual style (realistic,cartoon,8-bit), explain the point of view (from above,first person,wide angle) ")
+    with gr.Accordion("Instructions & Tips",label="Instructions & Tips",open=False):
+        gr.Markdown("**Instructions**: To use this service, please enter the password. Then generate an image from the prompt field below in response to the challenge, then click the download arrow from the top right of the image to save it.")
+        gr.Markdown("**Tips**: Use adjectives (size,color,mood), specify the visual style (realistic,cartoon,8-bit), explain the point of view (from above,first person,wide angle) ")
+    pw = gr.Textbox(label="Password", type="password", placeholder="Enter the password to unlock the service")
     challenge_display = gr.Textbox(label="Challenge", value=get_challenge())
     challenge_display.disabled = True
     regenerate_btn = gr.Button("New Challenge")
-    pw = gr.Textbox(label="Password", type="password",
-                     placeholder="Enter the password to unlock the service")
+
+    slider = gr.Slider(minimum=1, maximum=120, value=60,label="Countdown",info="Select duration in seconds")
+    with gr.Row():
+        countdown_button = gr.Button("Start")
+        stop_countdown_button = gr.Button("Stop")
+        reset_countdown_button = gr.Button("Reset")
+    countdown_button.click(fn=countdown, inputs=[slider], outputs=[slider])
+    stop_countdown_button.click(fn=stop_countdown)
+    reset_countdown_button.click(fn=reset_countdown,inputs=[slider],outputs=[slider])
+
     text = gr.Textbox(label="What do you want to create?",
                       placeholder="Enter your text and then click on the \"Image Generate\" button")
+
     model = gr.Dropdown(choices=["dall-e-2", "dall-e-3"], label="Model", value="dall-e-3")
+
     show_labels = gr.Checkbox(label="Show Image Labels", value=False)
+
     btn = gr.Button("Generate Images")
     output_images = gr.Gallery(label="Image Outputs", show_label=True, columns=[3], rows=[1], object_fit="contain",
                                 height="auto", allow_preview=False)
     #trigger generation either through hitting enter in the text field, or clicking the button.
-    text.submit(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels], outputs=output_images, api_name="generate_image") # Generate an api endpoint in Gradio / HF
     btn.click(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels], outputs=output_images, api_name=False)
+    text.submit(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels], outputs=output_images, api_name="generate_image") # Generate an api endpoint in Gradio / HF
     # toggle hiding and showing of labels
     show_labels.change(fn=update_labels, inputs=[show_labels], outputs=[output_images])
     # generate new challenge
