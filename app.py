@@ -122,7 +122,6 @@ def generate_images(prompts, pw, model):
     prompts_list = [prompt for prompt in prompts.split(';') if prompt]
 
     for i, entry in enumerate(prompts_list):
-        print(i)
         entry_parts = entry.split('-', 1)  # Split by the first dash found
         if len(entry_parts) == 2:
             #raise gr.Error("Invalid prompt format. Please ensure it is in 'initials-prompt' format.")
@@ -165,28 +164,27 @@ def generate_images(prompts, pw, model):
             image_paths.append(image_url)
             image_labels.append(image_label)
 
-        except Exception as error:
-            print(str(error))
+        except Exception as e:
+            print(e)
             raise gr.Error(f"An error occurred while generating the image for: {entry}")
 
     return image_paths, image_labels  # Return both image paths and labels
 
 with gr.Blocks() as demo:
     gr.Markdown("# <center>Prompt de Resistance Image Generator</center>")
-    gr.Markdown("**Instructions**: To use this service, please enter the password. Then generate an image from the prompt field below in response to the challenge, then click the download arrow from the top right of the image to save it.")
-    gr.Markdown("**Tips**: Use adjectives (size,color,mood), specify the visual style (realistic,cartoon,8-bit), explain the point of view (from above,first person,wide angle) ")
+    with gr.Accordion("Instructions & Tips",label="Instructions & Tips",open=True):
+        gr.Markdown("**Instructions**: To use this service, please enter the password. Then generate an image from the prompt field below in response to the challenge, then click the download arrow from the top right of the image to save it.")
+        gr.Markdown("**Tips**: Use adjectives (size,color,mood), specify the visual style (realistic,cartoon,8-bit), explain the point of view (from above,first person,wide angle) ")
     challenge_display = gr.Textbox(label="Challenge", value=get_challenge())
     challenge_display.disabled = True
     regenerate_btn = gr.Button("New Challenge")
-    pw = gr.Textbox(label="Password", type="password",
-                     placeholder="Enter the password to unlock the service")
-    text = gr.Textbox(label="What do you want to create?",
-                      placeholder="Enter your text and then click on the \"Image Generate\" button")
+    pw = gr.Textbox(label="Password", type="password", placeholder="Enter the password to unlock the service")
+    with gr.Accordion("Prompts",label="Prompts",open=True):
+        text = gr.Textbox(label="What do you want to create?", placeholder="Enter your text and then click on the \"Image Generate\" button")
     model = gr.Dropdown(choices=["dall-e-2", "dall-e-3"], label="Model", value="dall-e-3")
     show_labels = gr.Checkbox(label="Show Image Labels", value=False)
     btn = gr.Button("Generate Images")
-    output_images = gr.Gallery(label="Image Outputs", show_label=True, columns=[3], rows=[1], object_fit="contain",
-                                height="auto", allow_preview=False)
+    output_images = gr.Gallery(label="Image Outputs", show_label=True, columns=[3], rows=[1], object_fit="contain", height="auto", allow_preview=False)
     #trigger generation either through hitting enter in the text field, or clicking the button.
     text.submit(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels], outputs=output_images, api_name="generate_image") # Generate an api endpoint in Gradio / HF
     btn.click(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels], outputs=output_images, api_name=False)
