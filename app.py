@@ -110,6 +110,7 @@ def download_all_images():
 
 def generate_images(prompts, pw, model):
     # Check for a valid password
+
     if pw != os.getenv("PW"):
         raise gr.Error("Invalid password. Please try again.")
 
@@ -120,7 +121,8 @@ def generate_images(prompts, pw, model):
     # Split the prompts string into individual prompts based on semicolon separation
     prompts_list = [prompt for prompt in prompts.split(';') if prompt]
 
-    for entry in prompts_list:
+    for i, entry in enumerate(prompts_list):
+        print(i)
         entry_parts = entry.split('-', 1)  # Split by the first dash found
         if len(entry_parts) == 2:
             #raise gr.Error("Invalid prompt format. Please ensure it is in 'initials-prompt' format.")
@@ -150,7 +152,7 @@ def generate_images(prompts, pw, model):
 
             image_url = response.data[0].url
             # conditionally render the user to the label with the prompt
-            image_label = f"Prompt: {text}" if user_initials == "" else f"User: {user_initials}, Prompt: {text}"
+            image_label = f"Prompt {i}: {text}" if user_initials == "" else f"Prompt {i}: {text}, User: {user_initials}"
 
             try:
                 # Save the prompt, model, image URL, generation time and creation timestamp to the database
