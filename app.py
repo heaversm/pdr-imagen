@@ -11,9 +11,10 @@ import string
 #image generation stuff
 from PIL import Image
 
-# gradio / hf stuff
+# gradio / hf / image gen stuff
 import gradio as gr
 from openai import OpenAI
+import replicate
 from dotenv import load_dotenv
 
 # stats stuff
@@ -26,6 +27,8 @@ from datetime import datetime, timedelta
 
 
 load_dotenv()
+
+REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 
 openai_key = os.getenv("OPENAI_API_KEY")
 pw_key = os.getenv("PW")
@@ -135,23 +138,41 @@ def generate_images(prompts, pw, model):
         users.append(user_initials)  # Append user initials to the list
 
         try:
-            openai_client = OpenAI(api_key=openai_key)
+            #openai_client = OpenAI(api_key=openai_key)
             start_time = time.time()
 
             #make a prompt with the challenge and text
             prompt_w_challenge = f"{challenge}: {text}"
 
-            response = openai_client.images.generate(
-                prompt=prompt_w_challenge,
-                model=model, # dall-e-2 or dall-e-3
-                quality="standard", # standard or hd
-                size="512x512" if model == "dall-e-2" else "1024x1024", # varies for dalle-2 and dalle-3
-                n=1, # Number of images to generate
+            # response = openai_client.images.generate(
+            #     prompt=prompt_w_challenge,
+            #     model=model, # dall-e-2 or dall-e-3
+            #     quality="standard", # standard or hd
+            #     size="512x512" if model == "dall-e-2" else "1024x1024", # varies for dalle-2 and dalle-3
+            #     n=1, # Number of images to generate
+            # )
+
+            # stable diffusion
+            response = replicate.run(
+                "stability-ai/stable-diffusion:ac732df83cea7fff18b8472768c88ad041fa750ff7682a21affe81863cbe77e4",
+                input={
+                    "width": 768, #must be multiples of 64
+                    "height": 768,
+                    "prompt": prompt_w_challenge,
+                    "scheduler": "K_EULER", #controlling the steps of the diffusion process to balance between image quality, generation speed, and resource consumption - DDIM, K_EULER, DPMSolverMultistep, K_EULER_ANCESTRAL, PNDM, KLMS
+                    "num_outputs": 1, #images to generate
+                    "guidance_scale": 7.5, #0-20, higher the number, more it sticks to the prompt
+                    "num_inference_steps": 50 #1-500 - higher the better, generally
+                }
             )
+            print(response)
+
             end_time = time.time()
             gen_time = end_time - start_time  # total generation time
 
-            image_url = response.data[0].url
+            #image_url = response.data[0].url
+            image_url = response[0]
+
             # conditionally render the user to the label with the prompt
             image_label = f"{i}: {text}" if user_initials == "" else f"{i}: {user_initials}-{text}, "
 

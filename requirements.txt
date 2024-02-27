@@ -2,3 +2,4 @@ gradio==4.2.0
 openai==1.2.3
 python-dotenv==1.0.0
 pymongo
+replicate==0.24.0
