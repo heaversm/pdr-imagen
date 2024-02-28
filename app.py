@@ -13,7 +13,6 @@ from PIL import Image
 
 # gradio / hf / image gen stuff
 import gradio as gr
-from openai import OpenAI
 import replicate
 from dotenv import load_dotenv
 
@@ -30,11 +29,7 @@ load_dotenv()
 
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 
-openai_key = os.getenv("OPENAI_API_KEY")
 pw_key = os.getenv("PW")
-
-if openai_key == "<YOUR_OPENAI_API_KEY>":
-    openai_key = ""
 
 if pw_key == "<YOUR_PW>":
     pw_key = ""
@@ -42,8 +37,8 @@ if pw_key == "<YOUR_PW>":
 if pw_key == "":
     sys.exit("Please Provide A Password in the Environment Variables")
 
-if openai_key == "":
-    sys.exit("Please Provide Your OpenAI API Key")
+if REPLICATE_API_TOKEN == "":
+    sys.exit("Please Provide Your API Key")
 
 # Connect to MongoDB
 uri = os.getenv("MONGO_URI")
@@ -143,14 +138,6 @@ def generate_images(prompts, pw, model):
 
             #make a prompt with the challenge and text
             prompt_w_challenge = f"{challenge}: {text}"
-
-            # response = openai_client.images.generate(
-            #     prompt=prompt_w_challenge,
-            #     model=model, # dall-e-2 or dall-e-3
-            #     quality="standard", # standard or hd
-            #     size="512x512" if model == "dall-e-2" else "1024x1024", # varies for dalle-2 and dalle-3
-            #     n=1, # Number of images to generate
-            # )
 
             # stable diffusion
             response = replicate.run(
@@ -269,7 +256,7 @@ with gr.Blocks(css=css) as demo:
             with gr.Column(scale=3):
                 text = gr.Textbox(label="What do you want to create?", placeholder="Enter your text and then click on the \"Image Generate\" button")
             with gr.Column(scale=1):
-                model = gr.Dropdown(choices=["dall-e-2", "dall-e-3"], label="Model", value="dall-e-3")
+                model = gr.Dropdown(choices=["stable-diffusion"], label="Model", value="stable-diffusion")
         with gr.Row():
             btn = gr.Button("Generate Images")
 
