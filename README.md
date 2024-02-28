@@ -1,8 +1,8 @@
 ---
-title: Prompt de Resistance Image Generator
-emoji: 🕊️
-colorFrom: green
-colorTo: blue
+title: PDR-stable-diffusion
+emoji: 👁️
+colorFrom: orange
+colorTo: red
 sdk: gradio
 sdk_version: 4.18.0
 app_file: app.py
