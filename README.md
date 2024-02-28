@@ -1,7 +1,7 @@
 ---
 title: PDR-stable-diffusion
 emoji: 👁️
-colorFrom: orange
+colorFrom: yelolow #red, yellow, green, blue, indigo, purple, pink, gray
 colorTo: red
 sdk: gradio
 sdk_version: 4.18.0
