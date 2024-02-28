@@ -1,5 +1,5 @@
 ---
-title: PDR-stable-diffusion
+title: PDR Stable Diffusion
 emoji: 👁️
 colorFrom: yellow
 colorTo: red

@@ -69,9 +69,9 @@ def update_labels(show_labels):
     updated_gallery = [(path, label if show_labels else "") for path, label in zip(image_paths_global, image_labels_global)]
     return updated_gallery
 
-def generate_images_wrapper(prompts, pw, model, show_labels):
+def generate_images_wrapper(prompts, pw, model, show_labels,size, guidance, steps, scheduler):
     global image_paths_global, image_labels_global
-    image_paths, image_labels = generate_images(prompts, pw, model)
+    image_paths, image_labels = generate_images(prompts, pw, model,size,guidance,steps,scheduler)
     image_paths_global = image_paths
 
     # store this as a global so we can handle toggle state
@@ -108,7 +108,7 @@ def download_all_images():
     image_labels_global = []  # Reset the global variable
     return zip_path
 
-def generate_images(prompts, pw, model):
+def generate_images(prompts, pw, model,size,guidance,steps,scheduler):
     # Check for a valid password
 
     if pw != os.getenv("PW"):
@@ -143,13 +143,13 @@ def generate_images(prompts, pw, model):
             response = replicate.run(
                 "stability-ai/stable-diffusion:ac732df83cea7fff18b8472768c88ad041fa750ff7682a21affe81863cbe77e4",
                 input={
-                    "width": 768, #must be multiples of 64
-                    "height": 768,
+                    "width": int(size), #must be multiples of 64
+                    "height": int(size),
                     "prompt": prompt_w_challenge,
-                    "scheduler": "K_EULER", #controlling the steps of the diffusion process to balance between image quality, generation speed, and resource consumption - DDIM, K_EULER, DPMSolverMultistep, K_EULER_ANCESTRAL, PNDM, KLMS
+                    "scheduler": scheduler, #controlling the steps of the diffusion process to balance between image quality, generation speed, and resource consumption - DDIM, K_EULER, DPMSolverMultistep, K_EULER_ANCESTRAL, PNDM, KLMS
                     "num_outputs": 1, #images to generate
-                    "guidance_scale": 7.5, #0-20, higher the number, more it sticks to the prompt
-                    "num_inference_steps": 50 #1-500 - higher the better, generally
+                    "guidance_scale": int(guidance), #0-20, higher the number, more it sticks to the prompt
+                    "num_inference_steps": int(steps) #1-500 - higher the better, generally
                 }
             )
             print(response)
@@ -258,6 +258,13 @@ with gr.Blocks(css=css) as demo:
             with gr.Column(scale=1):
                 model = gr.Dropdown(choices=["stable-diffusion"], label="Model", value="stable-diffusion")
         with gr.Row():
+            with gr.Column():
+                size = gr.Dropdown(choices=[512,768,1024], label="Size", value=768)
+                scheduler = gr.Dropdown(choices=["DDIM", "K_EULER", "DPMSolverMultistep", "K_EULER_ANCESTRAL", "PNDM", "KLMS"], label="Scheduler", value="K_EULER", info="attempt to balance between image quality, generation speed, and resource consumption")
+            with gr.Column():
+                guidance = gr.Slider(minimum=0, maximum=20, value=7, step=1,label="Guidance",info="0-20, higher the number, more it sticks to the prompt")
+                steps = gr.Slider(minimum=10, maximum=500, value=50, step=10,label="Steps",info="10-500 - higher = better quality, lower = faster")
+        with gr.Row():
             btn = gr.Button("Generate Images")
 
     #output
@@ -280,8 +287,8 @@ with gr.Blocks(css=css) as demo:
 
     #submissions
     #trigger generation either through hitting enter in the text field, or clicking the button.
-    btn.click(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels], outputs=output_images, api_name=False)
-    text.submit(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels], outputs=output_images, api_name="generate_image") # Generate an api endpoint in Gradio / HF
+    btn.click(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels, size, guidance, steps, scheduler ], outputs=output_images, api_name=False)
+    text.submit(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels, size, guidance, steps, scheduler], outputs=output_images, api_name="generate_image") # Generate an api endpoint in Gradio / HF
     show_labels.change(fn=update_labels, inputs=[show_labels], outputs=[output_images])
 
     #downloads
