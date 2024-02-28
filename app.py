@@ -223,7 +223,7 @@ css = """
 
 with gr.Blocks(css=css) as demo:
 
-    gr.Markdown("# <center>Prompt de Resistance Image Generator</center>")
+    gr.Markdown("# <center>Prompt de Resistance Stable Diffusion</center>")
 
     pw = gr.Textbox(label="Password", type="password", placeholder="Enter the password to unlock the service")
 
