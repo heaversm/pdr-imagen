@@ -13,7 +13,7 @@ from PIL import Image
 
 # gradio / hf / image gen stuff
 import gradio as gr
-import replicate
+import anthropic
 from dotenv import load_dotenv
 
 # stats stuff
@@ -21,13 +21,10 @@ from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 import time
 
-# countdown stuff
-from datetime import datetime, timedelta
-
 
 load_dotenv()
 
-REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 pw_key = os.getenv("PW")
 
@@ -37,8 +34,11 @@ if pw_key == "<YOUR_PW>":
 if pw_key == "":
     sys.exit("Please Provide A Password in the Environment Variables")
 
-if REPLICATE_API_TOKEN == "":
+if ANTHROPIC_API_KEY == "":
     sys.exit("Please Provide Your API Key")
+
+client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+print(client)
 
 # Connect to MongoDB
 uri = os.getenv("MONGO_URI")
@@ -69,9 +69,9 @@ def update_labels(show_labels):
     updated_gallery = [(path, label if show_labels else "") for path, label in zip(image_paths_global, image_labels_global)]
     return updated_gallery
 
-def generate_images_wrapper(prompts, pw, model, show_labels,size, guidance, steps, scheduler):
+def generate_images_wrapper(prompts, pw, show_labels):
     global image_paths_global, image_labels_global
-    image_paths, image_labels = generate_images(prompts, pw, model,size,guidance,steps,scheduler)
+    image_paths, image_labels = generate_images(prompts, pw)
     image_paths_global = image_paths
 
     # store this as a global so we can handle toggle state
@@ -108,7 +108,7 @@ def download_all_images():
     image_labels_global = []  # Reset the global variable
     return zip_path
 
-def generate_images(prompts, pw, model,size,guidance,steps,scheduler):
+def generate_images(prompts, pw):
     # Check for a valid password
 
     if pw != os.getenv("PW"):
@@ -121,6 +121,8 @@ def generate_images(prompts, pw, model,size,guidance,steps,scheduler):
     # Split the prompts string into individual prompts based on semicolon separation
     prompts_list = [prompt for prompt in prompts.split(';') if prompt]
 
+    model = "claude-3-opus-20240229"
+
     for i, entry in enumerate(prompts_list):
         entry_parts = entry.split('-', 1)  # Split by the first dash found
         if len(entry_parts) == 2:
@@ -132,85 +134,21 @@ def generate_images(prompts, pw, model,size,guidance,steps,scheduler):
 
         users.append(user_initials)  # Append user initials to the list
 
-        try:
-            #openai_client = OpenAI(api_key=openai_key)
-            start_time = time.time()
+        prompt_w_challenge = f"{challenge}: {text}"
+        print(prompt_w_challenge)
 
-            #make a prompt with the challenge and text
-            prompt_w_challenge = f"{challenge}: {text}"
-
-            # stable diffusion
-            response = replicate.run(
-                "stability-ai/stable-diffusion:ac732df83cea7fff18b8472768c88ad041fa750ff7682a21affe81863cbe77e4",
-                input={
-                    "width": int(size), #must be multiples of 64
-                    "height": int(size),
-                    "prompt": prompt_w_challenge,
-                    "scheduler": scheduler, #controlling the steps of the diffusion process to balance between image quality, generation speed, and resource consumption - DDIM, K_EULER, DPMSolverMultistep, K_EULER_ANCESTRAL, PNDM, KLMS
-                    "num_outputs": 1, #images to generate
-                    "guidance_scale": int(guidance), #0-20, higher the number, more it sticks to the prompt
-                    "num_inference_steps": int(steps) #1-500 - higher the better, generally
+        response = client.messages.create(
+            max_tokens=1024,
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"Generate an image that depicts the following prompt: {prompt_w_challenge}"
                 }
-            )
-            print(response)
+            ],
+            model=model,
+        )
+        print(response.content)
 
-            end_time = time.time()
-            gen_time = end_time - start_time  # total generation time
-
-            #image_url = response.data[0].url
-            image_url = response[0]
-
-            # conditionally render the user to the label with the prompt
-            image_label = f"{i}: {text}" if user_initials == "" else f"{i}: {user_initials}-{text}, "
-
-            try:
-                # Save the prompt, model, image URL, generation time and creation timestamp to the database
-                mongo_collection.insert_one({"user": user_initials, "text": text, "model": model, "image_url": image_url, "gen_time": gen_time, "timestamp": time.time()})
-            except Exception as e:
-                print(e)
-                raise gr.Error("An error occurred while saving the prompt to the database.")
-
-            # Append the image URL and label to their respective lists
-            image_paths.append(image_url)
-            image_labels.append(image_label)
-
-        except Exception as e:
-            print(e)
-            raise gr.Error(f"An error occurred while generating the image for: {entry}")
-
-    return image_paths, image_labels  # Return both image paths and labels
-
-
-#timer stuff
-timer_cancelled_global = False # when true, timer does not tick down
-
-def countdown(seconds):
-  """
-  This function takes the number of seconds as input and returns a string displaying the remaining time.
-  """
-  target_time = datetime.now() + timedelta(seconds=int(seconds))
-  while target_time > datetime.now():
-    remaining_time = target_time - datetime.now()
-    remaining_seconds = int(remaining_time.total_seconds())
-    yield f"{remaining_seconds:02d}"
-    # Check if the countdown was cancelled
-    if timer_cancelled_global:
-      break
-
-def stop_countdown():
-  """
-  This function stops the countdown.
-  """
-  global timer_cancelled_global
-  timer_cancelled_global = True
-
-def reset_countdown(slider):
-  """
-  This function resets the countdown.
-  """
-  global timer_cancelled_global
-  timer_cancelled_global = False
-  return 60
 
 
 #custom css
@@ -223,9 +161,9 @@ css = """
 
 with gr.Blocks(css=css) as demo:
 
-    gr.Markdown("# <center>Prompt de Resistance Stable Diffusion</center>")
+    gr.Markdown("# <center>Prompt de Resistance Claude 3</center>")
 
-    pw = gr.Textbox(label="Password", type="password", placeholder="Enter the password to unlock the service")
+    pw = gr.Textbox(label="Password", type="password", placeholder="Enter the password to unlock the service", value="REBEL.pier6moment")
 
     #instructions
     with gr.Accordion("Instructions & Tips",label="instructions",open=False):
@@ -239,32 +177,10 @@ with gr.Blocks(css=css) as demo:
     regenerate_btn = gr.Button("New Challenge")
 
 
-    #countdown
-    with gr.Accordion("Countdown",label="Countdown",open=False):
-        with gr.Row():
-            with gr.Column(scale=3):
-                slider = gr.Slider(minimum=1, maximum=120, value=60,label="Countdown",info="Select duration in seconds")
-            with gr.Column(scale=1):
-                countdown_button = gr.Button("Start")
-                stop_countdown_button = gr.Button("Stop")
-                reset_countdown_button = gr.Button("Reset")
-
-
     #prompts
     with gr.Accordion("Prompts",label="Prompts",open=True):
-        with gr.Row():
-            with gr.Column(scale=3):
-                text = gr.Textbox(label="What do you want to create?", placeholder="Enter your text and then click on the \"Image Generate\" button")
-            with gr.Column(scale=1):
-                model = gr.Dropdown(choices=["stable-diffusion"], label="Model", value="stable-diffusion")
-        with gr.Row():
-            with gr.Column():
-                size = gr.Dropdown(choices=[512,768,1024], label="Size", value=768)
-                scheduler = gr.Dropdown(choices=["DDIM", "K_EULER", "DPMSolverMultistep", "K_EULER_ANCESTRAL", "PNDM", "KLMS"], label="Scheduler", value="K_EULER", info="attempt to balance between image quality, generation speed, and resource consumption")
-            with gr.Column():
-                guidance = gr.Slider(minimum=0, maximum=20, value=7, step=1,label="Guidance",info="0-20, higher the number, more it sticks to the prompt")
-                steps = gr.Slider(minimum=10, maximum=500, value=50, step=10,label="Steps",info="10-500 - higher = better quality, lower = faster")
-        with gr.Row():
+        text = gr.Textbox(label="What do you want to create?", placeholder="Enter your text and then click on the \"Image Generate\" button")
+    with gr.Row():
             btn = gr.Button("Generate Images")
 
     #output
@@ -280,15 +196,10 @@ with gr.Blocks(css=css) as demo:
     # generate new challenge
     regenerate_btn.click(fn=get_challenge, inputs=[], outputs=[challenge_display])
 
-    #countdown
-    countdown_button.click(fn=countdown, inputs=[slider], outputs=[slider])
-    stop_countdown_button.click(fn=stop_countdown)
-    reset_countdown_button.click(fn=reset_countdown,inputs=[slider],outputs=[slider])
-
     #submissions
     #trigger generation either through hitting enter in the text field, or clicking the button.
-    btn.click(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels, size, guidance, steps, scheduler ], outputs=output_images, api_name=False)
-    text.submit(fn=generate_images_wrapper, inputs=[text, pw, model, show_labels, size, guidance, steps, scheduler], outputs=output_images, api_name="generate_image") # Generate an api endpoint in Gradio / HF
+    btn.click(fn=generate_images_wrapper, inputs=[text, pw, show_labels ], outputs=output_images, api_name=False)
+    text.submit(fn=generate_images_wrapper, inputs=[text, pw, show_labels], outputs=output_images, api_name="generate_image") # Generate an api endpoint in Gradio / HF
     show_labels.change(fn=update_labels, inputs=[show_labels], outputs=[output_images])
 
     #downloads

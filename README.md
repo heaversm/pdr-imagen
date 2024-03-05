@@ -1,8 +1,8 @@
 ---
-title: PDR Stable Diffusion
-emoji: 👁️
-colorFrom: yellow
-colorTo: red
+title: PDR Claude
+emoji: 🎩
+colorFrom: indigo
+colorTo: violet
 sdk: gradio
 sdk_version: 4.18.0
 app_file: app.py
