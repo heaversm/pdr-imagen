@@ -2,7 +2,7 @@
 title: PDR Claude
 emoji: 🎩
 colorFrom: indigo
-colorTo: violet
+colorTo: pink
 sdk: gradio
 sdk_version: 4.18.0
 app_file: app.py
