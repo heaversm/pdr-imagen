@@ -146,7 +146,7 @@ def generate_images(prompts, pw):
         )
 
         print(response[0])
-        response[0].show()
+        response[0].save(f"image${i}".png)
 
 
 
