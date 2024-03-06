@@ -13,7 +13,6 @@ from PIL import Image
 
 # gradio / hf / image gen stuff
 import gradio as gr
-import anthropic
 from dotenv import load_dotenv
 
 # stats stuff
@@ -21,10 +20,17 @@ from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 import time
 
+# countdown stuff
+from datetime import datetime, timedelta
+
+from google.cloud import aiplatform
+import vertexai
+# from vertexai.preview.generative_models import GenerativeModel
+from vertexai.preview.vision_models import ImageGenerationModel
+from vertexai import preview
 
 load_dotenv()
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 pw_key = os.getenv("PW")
 
@@ -34,11 +40,6 @@ if pw_key == "<YOUR_PW>":
 if pw_key == "":
     sys.exit("Please Provide A Password in the Environment Variables")
 
-if ANTHROPIC_API_KEY == "":
-    sys.exit("Please Provide Your API Key")
-
-client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-print(client)
 
 # Connect to MongoDB
 uri = os.getenv("MONGO_URI")
@@ -121,7 +122,7 @@ def generate_images(prompts, pw):
     # Split the prompts string into individual prompts based on semicolon separation
     prompts_list = [prompt for prompt in prompts.split(';') if prompt]
 
-    model = "claude-3-opus-20240229"
+    # model = "claude-3-opus-20240229"
 
     for i, entry in enumerate(prompts_list):
         entry_parts = entry.split('-', 1)  # Split by the first dash found
@@ -137,17 +138,15 @@ def generate_images(prompts, pw):
         prompt_w_challenge = f"{challenge}: {text}"
         print(prompt_w_challenge)
 
-        response = client.messages.create(
-            max_tokens=1024,
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"Generate an image that depicts the following prompt: {prompt_w_challenge}"
-                }
-            ],
-            model=model,
+        #how to get model?
+        model = ImageGenerationModel.from_pretrained("imagegeneration@002")
+        response = model.generate_images(
+            prompt=prompt_w_challenge,
+            number_of_images=1,
         )
-        print(response.content)
+
+        print(response[0])
+        response[0].show()
 
 
 

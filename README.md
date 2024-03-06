@@ -1,6 +1,6 @@
 ---
-title: PDR Claude
-emoji: 🎩
+title: PDR Vertex
+emoji: 📐
 colorFrom: indigo
 colorTo: pink
 sdk: gradio
