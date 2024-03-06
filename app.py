@@ -23,11 +23,13 @@ import time
 # countdown stuff
 from datetime import datetime, timedelta
 
+
 from google.cloud import aiplatform
 import vertexai
 # from vertexai.preview.generative_models import GenerativeModel
 from vertexai.preview.vision_models import ImageGenerationModel
 from vertexai import preview
+import uuid #for generating unique filenames
 
 load_dotenv()
 
@@ -92,10 +94,11 @@ def zip_images(image_paths_and_labels):
     zip_file_path = tempfile.NamedTemporaryFile(delete=False, suffix='.zip').name
     with zipfile.ZipFile(zip_file_path, 'w') as zipf:
         for image_url, _ in image_paths_and_labels:
-            image_content = download_image(image_url)
+            # image_content = download_image(image_url)
+            image_content = open(image_url, "rb").read()
             random_filename = ''.join(random.choices(string.ascii_letters + string.digits, k=10)) + ".png"
             # Write the image content to the zip file with the random filename
-            zipf.writestr(random_filename, image_content)
+            zipf.writestr(image_url, image_content)
     return zip_file_path
 
 
@@ -107,6 +110,12 @@ def download_all_images():
     zip_path = zip_images(image_paths_and_labels)
     image_paths_global = []  # Reset the global variable
     image_labels_global = []  # Reset the global variable
+
+    # delete all local images
+    for image_path, _ in image_paths_and_labels:
+        os.remove(image_path)
+
+
     return zip_path
 
 def generate_images(prompts, pw):
@@ -138,17 +147,41 @@ def generate_images(prompts, pw):
         prompt_w_challenge = f"{challenge}: {text}"
         print(prompt_w_challenge)
 
-        #how to get model?
-        model = ImageGenerationModel.from_pretrained("imagegeneration@002")
-        response = model.generate_images(
-            prompt=prompt_w_challenge,
-            number_of_images=1,
-        )
+        start_time = time.time()
 
-        print(response[0])
-        response[0].save(f"image${i}".png)
+        try:
+            #what model to use?
+            model = ImageGenerationModel.from_pretrained("imagegeneration@002")
+            response = model.generate_images(
+                prompt=prompt_w_challenge,
+                number_of_images=1,
+            )
 
+            end_time = time.time()
+            gen_time = end_time - start_time  # total generation time
 
+            #generate random filename using uuid
+            filename = f"{uuid.uuid4()}.png"
+
+            # Save the image to a temporary file, and return this
+            image_url = filename
+            response[0].save(filename)
+            image_label = f"{i+1}: {text}"
+
+            try:
+                # Save the prompt, model, image URL, generation time and creation timestamp to the database
+                mongo_collection.insert_one({"user": user_initials, "text": text, "model": "imagen", "image_url": image_url, "gen_time": gen_time, "timestamp": time.time(), "challenge": challenge})
+            except Exception as e:
+                print(e)
+                raise gr.Error("An error occurred while saving the prompt to the database.")
+
+            # Append the image URL and label to their respective lists
+            image_paths.append(image_url)
+            image_labels.append(image_label)
+        except Exception as e:
+            print(e)
+            raise gr.Error(f"An error occurred while generating the image for: {entry}")
+    return image_paths, image_labels
 
 #custom css
 css = """
@@ -160,7 +193,7 @@ css = """
 
 with gr.Blocks(css=css) as demo:
 
-    gr.Markdown("# <center>Prompt de Resistance Claude 3</center>")
+    gr.Markdown("# <center>Prompt de Resistance Vertex Imagen</center>")
 
     pw = gr.Textbox(label="Password", type="password", placeholder="Enter the password to unlock the service", value="REBEL.pier6moment")
 
