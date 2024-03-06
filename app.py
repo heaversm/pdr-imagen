@@ -72,9 +72,9 @@ def update_labels(show_labels):
     updated_gallery = [(path, label if show_labels else "") for path, label in zip(image_paths_global, image_labels_global)]
     return updated_gallery
 
-def generate_images_wrapper(prompts, pw, show_labels):
+def generate_images_wrapper(prompts, pw, show_labels,model):
     global image_paths_global, image_labels_global
-    image_paths, image_labels = generate_images(prompts, pw)
+    image_paths, image_labels = generate_images(prompts, pw,model)
     image_paths_global = image_paths
 
     # store this as a global so we can handle toggle state
@@ -118,7 +118,7 @@ def download_all_images():
 
     return zip_path
 
-def generate_images(prompts, pw):
+def generate_images(prompts, pw,model_name):
     # Check for a valid password
 
     if pw != os.getenv("PW"):
@@ -151,7 +151,7 @@ def generate_images(prompts, pw):
 
         try:
             #what model to use?
-            model = ImageGenerationModel.from_pretrained("imagegeneration@002")
+            model = ImageGenerationModel.from_pretrained(model_name)
             response = model.generate_images(
                 prompt=prompt_w_challenge,
                 number_of_images=1,
@@ -168,9 +168,11 @@ def generate_images(prompts, pw):
             response[0].save(filename)
             image_label = f"{i+1}: {text}"
 
+            model_for_db = f"imagen-{model_name}"
+
             try:
                 # Save the prompt, model, image URL, generation time and creation timestamp to the database
-                mongo_collection.insert_one({"user": user_initials, "text": text, "model": "imagen", "image_url": image_url, "gen_time": gen_time, "timestamp": time.time(), "challenge": challenge})
+                mongo_collection.insert_one({"user": user_initials, "text": text, "model": model_for_db, "image_url": image_url, "gen_time": gen_time, "timestamp": time.time(), "challenge": challenge})
             except Exception as e:
                 print(e)
                 raise gr.Error("An error occurred while saving the prompt to the database.")
@@ -195,7 +197,7 @@ with gr.Blocks(css=css) as demo:
 
     gr.Markdown("# <center>Prompt de Resistance Vertex Imagen</center>")
 
-    pw = gr.Textbox(label="Password", type="password", placeholder="Enter the password to unlock the service", value="REBEL.pier6moment")
+    pw = gr.Textbox(label="Password", type="password", placeholder="Enter the password to unlock the service")
 
     #instructions
     with gr.Accordion("Instructions & Tips",label="instructions",open=False):
@@ -212,8 +214,12 @@ with gr.Blocks(css=css) as demo:
     #prompts
     with gr.Accordion("Prompts",label="Prompts",open=True):
         text = gr.Textbox(label="What do you want to create?", placeholder="Enter your text and then click on the \"Image Generate\" button")
+
+    model = gr.Dropdown(choices=["imagegeneration@002", "imagegeneration@005"], label="Model", value="imagegeneration@005")
+
     with gr.Row():
             btn = gr.Button("Generate Images")
+
 
     #output
     with gr.Accordion("Image Outputs",label="Image Outputs",open=True):
@@ -230,8 +236,8 @@ with gr.Blocks(css=css) as demo:
 
     #submissions
     #trigger generation either through hitting enter in the text field, or clicking the button.
-    btn.click(fn=generate_images_wrapper, inputs=[text, pw, show_labels ], outputs=output_images, api_name=False)
-    text.submit(fn=generate_images_wrapper, inputs=[text, pw, show_labels], outputs=output_images, api_name="generate_image") # Generate an api endpoint in Gradio / HF
+    btn.click(fn=generate_images_wrapper, inputs=[text, pw, show_labels,model ], outputs=output_images, api_name=False)
+    text.submit(fn=generate_images_wrapper, inputs=[text, pw, show_labels,model], outputs=output_images, api_name="generate_image") # Generate an api endpoint in Gradio / HF
     show_labels.change(fn=update_labels, inputs=[show_labels], outputs=[output_images])
 
     #downloads
